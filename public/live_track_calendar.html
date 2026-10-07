@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live_track Calendar Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { background-color: #f1f5f9; font-family: system-ui, -apple-system, sans-serif; }
+    .calendar-container { width: 80%; max-width: 1400px; margin: 0 auto; }
+    @media (max-width: 768px) { .calendar-container { width: 95%; } }
+  </style>
+</head>
+<body class="p-4 md:p-8">
+
+  <div class="calendar-container">
+    <!-- Header Card -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-5 space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+            <i class="fa-solid fa-database"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-xl font-bold text-slate-900">Live_track Database Manager</h1>
+              <span id="connStatus" class="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-semibold border border-emerald-200">
+                Connected
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 font-mono">https://live-track-799f8-default-rtdb.europe-west1.firebasedatabase.app/tracking</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="fetchDates()" id="refreshBtn" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+            <i class="fa-solid fa-rotate-right mr-1"></i> Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation & Global Delete -->
+      <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+        <div class="flex items-center gap-2">
+          <button onclick="changeMonth(-1)" class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <button onclick="changeMonth(1)" class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">
+            <i class="fa-solid fa-chevron-right"></i>
+          </button>
+          <button onclick="goToToday()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
+            Today
+          </button>
+          <span id="currentMonthLabel" class="text-base font-bold text-slate-800 ml-2">Loading...</span>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div id="monthStats" class="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+            <span id="monthDatesCountLabel">0 dates</span>
+          </div>
+
+          <!-- GLOBAL DELETE FOR MONTH -->
+          <button onclick="requestDeleteMonth()" id="deleteMonthBtn" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-600 hover:text-white transition">
+            <i class="fa-solid fa-trash-can mr-1.5"></i> Delete Month Entries
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Jump Chips -->
+      <div id="quickJumpContainer" class="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
+        <span class="text-slate-400 font-medium">Recorded Months:</span>
+      </div>
+    </div>
+
+    <!-- Calendar Grid Card (Occupies 80% of page) -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+      <div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-slate-500 uppercase">
+        <div class="py-1">Mon</div>
+        <div class="py-1">Tue</div>
+        <div class="py-1">Wed</div>
+        <div class="py-1">Thu</div>
+        <div class="py-1">Fri</div>
+        <div class="py-1 text-indigo-600">Sat</div>
+        <div class="py-1 text-indigo-600">Sun</div>
+      </div>
+      <div id="calendarGrid" class="grid grid-cols-7 gap-2"></div>
+    </div>
+  </div>
+
+  <!-- DATE DETAILS & GPX TRACK MODAL -->
+  <div id="detailsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">
+            <i class="fa-solid fa-route"></i>
+          </div>
+          <div>
+            <h3 id="modalDateTitle" class="text-lg font-bold text-slate-900">Date Details</h3>
+            <p id="modalDateSub" class="text-xs text-slate-500 font-mono"></p>
+          </div>
+        </div>
+        <button onclick="closeDetailsModal()" class="text-slate-400 hover:text-slate-600 p-2">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="p-5 flex-1 overflow-y-auto space-y-4">
+        <!-- GPX Buttons bar -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div>
+            <h4 id="modalTrackerName" class="font-bold text-slate-900 text-sm">GPX Track</h4>
+            <p id="modalPointsSummary" class="text-xs text-slate-500"></p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <a id="btnGoogleTrack" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-indigo-800 border border-indigo-200 hover:bg-indigo-50 shadow-xs">
+              <i class="fa-solid fa-diamond-turn-right text-indigo-600"></i> Google Maps (GPX Track)
+            </a>
+            <a id="btnOsmTrack" href="#" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-emerald-800 border border-emerald-200 hover:bg-emerald-50 shadow-xs">
+              <i class="fa-solid fa-map text-emerald-600"></i> OpenStreetMap (GPX Track)
+            </a>
+            <button onclick="downloadCurrentModalGpx()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 shadow-xs">
+              <i class="fa-solid fa-download"></i> Export GPX
+            </button>
+          </div>
+        </div>
+
+        <!-- Embedded Leaflet Map -->
+        <div id="modalLeafletMap" class="w-full h-80 rounded-xl border border-slate-200"></div>
+
+        <!-- Current Coordinate Details -->
+        <div id="modalFixDetails" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+      </div>
+
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <button onclick="closeDetailsModal()" class="px-4 py-2 text-xs font-bold bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-100">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DB_BASE = "https://live-track-799f8-default-rtdb.europe-west1.firebasedatabase.app";
+    let viewYear = 2026;
+    let viewMonth = 6; // July (0-indexed)
+    let allDbDates = [];
+    let dateSummaries = {};
+    let modalMapInstance = null;
+    let currentModalPoints = [];
+    let currentModalDate = "";
+    let currentModalTracker = "";
+
+    async function fetchDates() {
+      const btn = document.getElementById('refreshBtn');
+      if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading...';
+      try {
+        const res = await fetch(`${DB_BASE}/tracking.json?shallow=true`);
+        const data = await res.json();
+        allDbDates = data ? Object.keys(data).sort() : [];
+        renderQuickJumps();
+        renderCalendar();
+      } catch (err) {
+        alert("Failed to load Firebase Live_track data: " + err.message);
+      } finally {
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-rotate-right mr-1"></i> Refresh';
+      }
+    }
+
+    function changeMonth(offset) {
+      viewMonth += offset;
+      if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+      else if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+      renderCalendar();
+    }
+
+    function goToToday() {
+      const d = new Date();
+      viewYear = d.getFullYear();
+      viewMonth = d.getMonth();
+      renderCalendar();
+    }
+
+    function getMonthPrefix() {
+      const m = String(viewMonth + 1).padStart(2, '0');
+      return `${viewYear}${m}`;
+    }
+
+    function renderQuickJumps() {
+      const container = document.getElementById('quickJumpContainer');
+      const counts = {};
+      allDbDates.forEach(d => {
+        const ym = d.substring(0, 6);
+        counts[ym] = (counts[ym] || 0) + 1;
+      });
+      container.innerHTML = '<span class="text-slate-400 font-medium">Recorded Months:</span>';
+      Object.keys(counts).sort().forEach(ym => {
+        const y = parseInt(ym.substring(0, 4));
+        const m = parseInt(ym.substring(4, 6)) - 1;
+        const monthName = new Date(y, m, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        const chip = document.createElement('button');
+        chip.className = "px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 border border-slate-200 rounded-md text-xs font-semibold transition";
+        chip.innerHTML = `${monthName} <span class="bg-slate-200 text-[10px] px-1 rounded-full">${counts[ym]}</span>`;
+        chip.onclick = () => { viewYear = y; viewMonth = m; renderCalendar(); };
+        container.appendChild(chip);
+      });
+    }
+
+    async function renderCalendar() {
+      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      document.getElementById('currentMonthLabel').innerText = `${monthNames[viewMonth]} ${viewYear}`;
+
+      const grid = document.getElementById('calendarGrid');
+      grid.innerHTML = '';
+
+      const prefix = getMonthPrefix();
+      const monthDates = allDbDates.filter(d => d.startsWith(prefix));
+      document.getElementById('monthDatesCountLabel').innerText = `${monthDates.length} recorded dates`;
+
+      const delBtn = document.getElementById('deleteMonthBtn');
+      if (monthDates.length === 0) {
+        delBtn.classList.add('opacity-50', 'pointer-events-none');
+      } else {
+        delBtn.classList.remove('opacity-50', 'pointer-events-none');
+      }
+
+      const firstDay = new Date(viewYear, viewMonth, 1);
+      const lastDay = new Date(viewYear, viewMonth + 1, 0);
+      let startDay = (firstDay.getDay() + 6) % 7; // Mon = 0
+      const totalDays = lastDay.getDate();
+
+      // Prev month pad
+      const prevLast = new Date(viewYear, viewMonth, 0).getDate();
+      for (let i = startDay - 1; i >= 0; i--) {
+        grid.appendChild(createCell(prevLast - i, false));
+      }
+
+      // Current month
+      for (let day = 1; day <= totalDays; day++) {
+        const dStr = `${viewYear}${String(viewMonth + 1).padStart(2, '0')}${String(day).padStart(2, '0')}`;
+        grid.appendChild(createCell(day, true, dStr));
+      }
+
+      // Next month pad
+      const remaining = (7 - ((startDay + totalDays) % 7)) % 7;
+      for (let day = 1; day <= remaining; day++) {
+        grid.appendChild(createCell(day, false));
+      }
+
+      // Fetch summaries for month dates
+      monthDates.forEach(dStr => {
+        if (!dateSummaries[dStr]) fetchDaySummary(dStr);
+      });
+    }
+
+    function createCell(dayNum, isCurrentMonth, dateStr) {
+      const cell = document.createElement('div');
+      cell.className = `p-3 min-h-[115px] border rounded-xl flex flex-col justify-between transition cursor-pointer ${isCurrentMonth ? 'bg-white border-slate-200' : 'bg-slate-50/70 border-slate-100 text-slate-300'}`;
+      if (dateStr) {
+        cell.id = `cell-${dateStr}`;
+        cell.onclick = () => openDayDetails(dateStr);
+      }
+
+      const hasData = dateStr && allDbDates.includes(dateStr);
+      if (hasData) {
+        cell.className += ' bg-gradient-to-b from-white to-sky-50/40 border-indigo-200 hover:shadow-md';
+      }
+
+      cell.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-bold ${isCurrentMonth ? 'text-slate-800' : 'text-slate-400'}">${dayNum}</span>
+        </div>
+        <div class="my-1" id="content-${dateStr || ''}">
+          ${hasData ? '<span class="text-xs text-indigo-500"><i class="fa-solid fa-spinner fa-spin"></i></span>' : '<span class="text-[11px] text-slate-300">No entries</span>'}
+        </div>
+        <div class="text-[10px] text-slate-400 font-mono">${dateStr ? dateStr.slice(4) : ''}</div>
+      `;
+      return cell;
+    }
+
+    async function fetchDaySummary(dateStr) {
+      try {
+        const res = await fetch(`${DB_BASE}/tracking/${dateStr}.json`);
+        const data = await res.json();
+        dateSummaries[dateStr] = data;
+        updateCellUI(dateStr, data);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function updateCellUI(dateStr, data) {
+      const container = document.getElementById(`content-${dateStr}`);
+      if (!container || !data) return;
+
+      const trackers = Object.keys(data);
+      let totalPts = 0;
+      trackers.forEach(t => {
+        const obj = data[t];
+        if (obj?.current) totalPts++;
+        if (Array.isArray(obj?.history)) totalPts += obj.history.filter(Boolean).length;
+      });
+
+      // CLOSE TO THE NUMBER WE HAVE AN ICON REMOVE THAT REMOVES ENTRIES FOR THAT DATE
+      container.innerHTML = `
+        <div class="flex items-center justify-between p-1.5 bg-indigo-50 rounded-lg border border-indigo-100">
+          <span class="text-xs font-bold text-indigo-900">${totalPts} entries</span>
+          <button onclick="deleteDate('${dateStr}', event)" title="Remove entries for this date" class="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-100">
+            <i class="fa-solid fa-trash-can text-xs"></i>
+          </button>
+        </div>
+        <div class="text-[10px] text-slate-600 mt-1 truncate">
+          <i class="fa-solid fa-user text-slate-400"></i> ${trackers.join(', ')}
+        </div>
+      `;
+    }
+
+    async function openDayDetails(dateStr) {
+      currentModalDate = dateStr;
+      let data = dateSummaries[dateStr];
+      if (!data) {
+        try {
+          const res = await fetch(`${DB_BASE}/tracking/${dateStr}.json`);
+          data = await res.json();
+          dateSummaries[dateStr] = data;
+        } catch (e) {
+          return alert("Could not load date: " + e.message);
+        }
+      }
+      if (!data) return;
+
+      const trackers = Object.keys(data);
+      if (!trackers.length) return alert("No tracking data on this date.");
+
+      currentModalTracker = trackers[0];
+      const tData = data[currentModalTracker];
+
+      // Build points list
+      const pts = [];
+      if (Array.isArray(tData?.history)) {
+        tData.history.forEach(p => { if (p && typeof p.lat === 'number') pts.push(p); });
+      }
+      if (tData?.current && typeof tData.current.lat === 'number') {
+        pts.push(tData.current);
+      }
+      currentModalPoints = pts;
+
+      document.getElementById('modalDateTitle').innerText = `Tracking for ${dateStr}`;
+      document.getElementById('modalDateSub').innerText = `tracking/${dateStr}/${currentModalTracker}`;
+      document.getElementById('modalTrackerName').innerText = `${currentModalTracker} — GPX Track (${pts.length} points)`;
+      document.getElementById('modalPointsSummary').innerText = pts.length ? `Start: ${pts[0].time || ''} • Latest: ${pts[pts.length-1].time || ''}` : '';
+
+      // GOOGLE MAPS GPX TRACK ROUTE URL
+      if (pts.length > 0) {
+        const origin = `${pts[0].lat},${pts[0].lon}`;
+        const dest = `${pts[pts.length-1].lat},${pts[pts.length-1].lon}`;
+        let gUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}`;
+        if (pts.length > 2) {
+          const waypoints = [];
+          const step = Math.max(1, Math.floor((pts.length - 2) / 6));
+          for (let i = 1; i < pts.length - 1; i += step) {
+            waypoints.push(`${pts[i].lat},${pts[i].lon}`);
+            if (waypoints.length >= 7) break;
+          }
+          gUrl += `&waypoints=${encodeURIComponent(waypoints.join('|'))}`;
+        }
+        document.getElementById('btnGoogleTrack').href = gUrl;
+      }
+
+      // OPENSTREETMAP TRACK URL
+      if (pts.length > 0) {
+        const geojson = {
+          type: "FeatureCollection",
+          features: [{
+            type: "Feature",
+            geometry: { type: "LineString", coordinates: pts.map(p => [p.lon, p.lat]) }
+          }]
+        };
+        document.getElementById('btnOsmTrack').href = `https://geojson.io/#data=data:application/json,${encodeURIComponent(JSON.stringify(geojson))}`;
+      }
+
+      // Render Leaflet Map
+      document.getElementById('detailsModal').classList.remove('hidden');
+      setTimeout(() => {
+        const container = document.getElementById('modalLeafletMap');
+        if (modalMapInstance) {
+          modalMapInstance.remove();
+          modalMapInstance = null;
+        }
+        if (pts.length > 0) {
+          modalMapInstance = L.map(container);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(modalMapInstance);
+
+          const latlngs = pts.map(p => [p.lat, p.lon]);
+          const line = L.polyline(latlngs, { color: '#4f46e5', weight: 4 }).addTo(modalMapInstance);
+          modalMapInstance.fitBounds(line.getBounds(), { padding: [30, 30] });
+
+          L.marker(latlngs[0]).bindPopup(`Start: ${pts[0].time || ''}`).addTo(modalMapInstance);
+          if (pts.length > 1) {
+            L.marker(latlngs[latlngs.length - 1]).bindPopup(`Latest: ${pts[pts.length - 1].time || ''}`).addTo(modalMapInstance);
+          }
+        }
+      }, 150);
+
+      // Latest Fix Cards
+      const fixBox = document.getElementById('modalFixDetails');
+      if (tData?.current) {
+        fixBox.innerHTML = `
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+            <span class="text-slate-400 block font-bold uppercase text-[10px]">Latitude</span>
+            <span class="font-mono font-bold text-slate-800">${tData.current.lat}</span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+            <span class="text-slate-400 block font-bold uppercase text-[10px]">Longitude</span>
+            <span class="font-mono font-bold text-slate-800">${tData.current.lon}</span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+            <span class="text-slate-400 block font-bold uppercase text-[10px]">Time</span>
+            <span class="font-mono text-slate-800">${tData.current.time || 'N/A'}</span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+            <span class="text-slate-400 block font-bold uppercase text-[10px]">FC Fix</span>
+            <span class="font-mono font-bold text-indigo-600">${tData.current.FC ?? 0}</span>
+          </div>
+        `;
+      } else {
+        fixBox.innerHTML = '';
+      }
+    }
+
+    function closeDetailsModal() {
+      document.getElementById('detailsModal').classList.add('hidden');
+      if (modalMapInstance) {
+        modalMapInstance.remove();
+        modalMapInstance = null;
+      }
+    }
+
+    function downloadCurrentModalGpx() {
+      if (!currentModalPoints.length) return;
+      const trkpts = currentModalPoints.map(p => `      <trkpt lat="${p.lat}" lon="${p.lon}"><time>${(p.time || '').replace(' ', 'T')}Z</time></trkpt>`).join('\n');
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Live_track" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>${currentModalTracker} (${currentModalDate})</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+      const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentModalTracker}_${currentModalDate}.gpx`;
+      a.click();
+    }
+
+    async function deleteDate(dateStr, event) {
+      if (event) event.stopPropagation();
+      if (!confirm(`Are you sure you want to remove all entries for date ${dateStr} in Live_track database?`)) return;
+
+      try {
+        const res = await fetch(`${DB_BASE}/tracking/${dateStr}.json`, { method: 'DELETE' });
+        if (res.ok) {
+          allDbDates = allDbDates.filter(d => d !== dateStr);
+          delete dateSummaries[dateStr];
+          renderCalendar();
+          alert(`Date ${dateStr} successfully deleted from Live_track.`);
+        }
+      } catch (err) {
+        alert("Delete failed: " + err.message);
+      }
+    }
+
+    async function requestDeleteMonth() {
+      const prefix = getMonthPrefix();
+      const monthDates = allDbDates.filter(d => d.startsWith(prefix));
+      if (!monthDates.length) return;
+
+      if (!confirm(`GLOBAL DELETE WARNING:
+Are you sure you want to delete all entries for ${monthDates.length} dates in ${document.getElementById('currentMonthLabel').innerText}?
+This action is permanent in Live_track.`)) return;
+
+      const patchBody = {};
+      monthDates.forEach(d => { patchBody[d] = null; });
+
+      try {
+        const res = await fetch(`${DB_BASE}/tracking.json`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patchBody)
+        });
+        if (res.ok) {
+          allDbDates = allDbDates.filter(d => !d.startsWith(prefix));
+          renderCalendar();
+          alert(`Successfully deleted all entries for the month.`);
+        }
+      } catch (err) {
+        alert("Failed to delete month: " + err.message);
+      }
+    }
+
+    // Initial load
+    fetchDates();
+  </script>
+</body>
+</html>

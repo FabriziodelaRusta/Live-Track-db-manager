@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: '/Live-Track-db-manager/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

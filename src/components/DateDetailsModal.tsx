@@ -52,8 +52,6 @@ export const DateDetailsModal: React.FC<DateDetailsModalProps> = ({
   const [copiedJson, setCopiedJson] = useState(false);
   const [deletingTracker, setDeletingTracker] = useState<string | null>(null);
 
-  if (!isOpen || !dateStr) return null;
-
   const trackerNames = rawDayData
     ? Object.keys(rawDayData)
     : summary?.trackerNames || [];
@@ -123,6 +121,9 @@ export const DateDetailsModal: React.FC<DateDetailsModalProps> = ({
       }
     }
   };
+
+  // Safe early return after all hooks have executed unconditionally
+  if (!isOpen || !dateStr) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">

@@ -23,10 +23,10 @@ import { ToastContainer } from './components/Toast';
 import { Database, AlertTriangle, RefreshCw, Calendar as CalendarIcon, Info } from 'lucide-react';
 
 export default function App() {
-  // Navigation state (Defaulting to 2026, Month 6 = July 2026, where user's primary tracking data is)
-  const [currentYear, setCurrentYear] = useState<number>(2026);
-  const [currentMonth, setCurrentMonth] = useState<number>(6); // 6 = July (0-indexed)
-
+// Navigation state — open on the current month
+  const now = new Date();
+  const [currentYear, setCurrentYear] = useState<number>(now.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState<number>(now.getMonth());
   // DB Config & status
   const [config, setConfig] = useState<RtdbConfig>(getStoredConfig());
   const [isRefreshing, setIsRefreshing] = useState(false);
